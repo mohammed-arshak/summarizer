@@ -11,5 +11,4 @@ nltk==3.7
 deep_translator==1.8.1
 gTTS==2.2.3
 sumy
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz
 https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.6.0/en_core_web_lg-3.6.0-py3-none-any.whl
