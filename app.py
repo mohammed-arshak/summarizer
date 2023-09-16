@@ -1,4 +1,4 @@
-#-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x
+ #-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x
 # Importing Libraries
 
 # Running Streamlit
@@ -10,8 +10,6 @@ st.set_page_config( # Added favicon and title to the web app
      initial_sidebar_state="expanded",
  )
 import base64
-from pytube import YouTube  # Add this line to import the YouTube module
-import requests
 
 # Extracting Transcript from YouTube
 from bs4 import BeautifulSoup
@@ -32,8 +30,12 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 #-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x
 # All Funtions
 
+# Gensim Summarization
+from gensim.summarization.summarizer import summarize
 
-
+def gensim_summarize(text_content, percent):
+    summary = summarize(text_content, ratio=(int(percent) / 100), split=False).replace("\n", " ")
+    return summary
 
 # NLTK Summarization
 import nltk
@@ -81,7 +83,8 @@ def nltk_summarize(text_content, percent):
 # Spacy Summarization
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
-nlp = spacy.load("en_core_web_sm")
+import en_core_web_sm
+nlp = en_core_web_sm.load()
 def spacy_summarize(text_content, percent):
     stop_words = list(STOP_WORDS)
     punctuation_items = punctuation + '\n'
@@ -252,6 +255,48 @@ def get_key_from_dict(val,dic):
     ind=val_list.index(val)
     return key_list[ind]
 
+#Coreference Resolution
+import nltk
+from string import punctuation
+from heapq import nlargest
+nltk.download('punkt')
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize, sent_tokenize
+
+def nltk_summarize(text_content, percent):
+    tokens = word_tokenize(text_content)
+    stop_words = stopwords.words('english')
+    punctuation_items = punctuation + '\n'
+
+    word_frequencies = {}
+    for word in tokens:
+        if word.lower() not in stop_words:
+            if word.lower() not in punctuation_items:
+                if word not in word_frequencies.keys():
+                    word_frequencies[word] = 1
+                else:
+                    word_frequencies[word] += 1
+    max_frequency = max(word_frequencies.values())
+
+    for word in word_frequencies.keys():
+        word_frequencies[word] = word_frequencies[word] / max_frequency
+    sentence_token = sent_tokenize(text_content)
+    sentence_scores = {}
+    for sent in sentence_token:
+        sentence = sent.split(" ")
+        for word in sentence:
+            if word.lower() in word_frequencies.keys():
+                if sent not in sentence_scores.keys():
+                    sentence_scores[sent] = word_frequencies[word.lower()]
+                else:
+                    sentence_scores[sent] += word_frequencies[word.lower()]
+
+    select_length = int(len(sentence_token) * (int(percent) / 100))
+    summary = nlargest(select_length, sentence_scores, key=sentence_scores.get)
+    final_summary = [word for word in summary]
+    summary = ' '.join(final_summary)
+    return summary
 
 #-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x
 
@@ -276,25 +321,24 @@ st.sidebar.markdown(
 )
 
 # Input Video Link
-url = st.sidebar.text_input('Enter YouTube video URL')
+url = st.sidebar.text_input('Video URL', 'https://www.youtube.com/watch?v=T-JVpKku5SI')
+
 # Display Video and Title
-if url.startswith("https://www.youtube.com/"):
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
+from bs4 import BeautifulSoup
+import requests
 
-    link = soup.find_all(name="title")[0]
-    title = str(link)
-    title = title.replace("<title>", "")
-    title = title.replace("</title>", "")
-    title = title.replace("&amp;", "&")
+r = requests.get("https://www.youtube.com/watch?v=T-JVpKku5SI")
+soup = BeautifulSoup(r.text)
 
-    value = title
-    st.info("### " + value)
-    st.video(url)
-else:
-    st.sidebar.error("Please enter a valid YouTube video URL")
+link = soup.find_all(name="title")[0]
+title = str(link)
+title = title.replace("<title>","")
+title = title.replace("</title>","")
+title = title.replace("&amp;","&")
 
-
+value = title
+st.info("### " + value)
+st.video(url)
 
 #Specify Summarization type
 sumtype = st.sidebar.selectbox(
@@ -307,7 +351,7 @@ if sumtype == 'Extractive':
      # Specify the summarization algorithm
      sumalgo = st.sidebar.selectbox(
           'Select a Summarisation Algorithm',
-          options=['NLTK', 'Spacy', 'TF-IDF'])
+          options=['Gensim', 'NLTK', 'Spacy', 'TF-IDF'])
 
      # Specify the summary length
      length = st.sidebar.select_slider(
@@ -332,19 +376,60 @@ if sumtype == 'Extractive':
          id = url_data.query[2::]
 
          def generate_transcript(id):
-def summarize_transcript(transcript):
-    summariser = pipeline('summarization', model='t5-base')
-    summary = ''
-    for i in range(0, (len(transcript)//1000)+1):
-        summary_text = summariser(transcript[i*1000:(i+1)*1000])[0]['summary_text']
-        summary = summary + summary_text + ' '
-    return summary
+                 transcript = YouTubeTranscriptApi.get_transcript(id)
+                 script = ""
+
+                 for text in transcript:
+                         t = text["text"]
+                         if t != '[Music]':
+                                 script += t + " "
+
+                 return script, len(script.split())
+         transcript, no_of_words = generate_transcript(id)
+
+         # Transcript Summarization is done here
+         if sumalgo == 'Gensim':
+             summ = gensim_summarize(transcript, int(length[:2]))
+
+
+         if sumalgo == 'NLTK':
+             summ = nltk_summarize(transcript, int(length[:2]))
+
+
+         if sumalgo == 'Spacy':
+             summ = spacy_summarize(transcript, int(length[:2]))
+
+         if sumalgo == 'TF-IDF':
+             sentences = sent_tokenize(transcript) # NLTK function
+             total_documents = len(sentences)
+             sentences = sent_tokenize(transcript)
+             total_documents = len(sentences)
+
+             freq_matrix = _create_frequency_matrix(sentences)
+
+             tf_matrix = _create_tf_matrix(freq_matrix)
+
+             count_doc_per_words = _create_documents_per_words(freq_matrix)
+
+             idf_matrix = _create_idf_matrix(freq_matrix, count_doc_per_words, total_documents)
+
+             tf_idf_matrix = _create_tf_idf_matrix(tf_matrix, idf_matrix)
+
+             sentence_scores = _score_sentences(tf_idf_matrix)
+
+             threshold = _find_average_score(sentence_scores)
+
+             summary = _generate_summary(sentences, sentence_scores, 1.0 * threshold)
+            
+             summ = summary
+              
+               
+
+          
 
          # Translate and Print Summary
          translated = GoogleTranslator(source='auto', target= get_key_from_dict(add_selectbox,languages_dict)).translate(summ)
          html_str3 = f"""
-         
-
 <style>
 p.a {{
 text-align: justify;
@@ -385,7 +470,6 @@ elif sumtype == 'Abstractive (T5 Algorithm)':
           st.success(dedent("""### \U0001F4D6 Summary
 > Success!
     """))
-    
 
           # Generate Transcript by slicing YouTube link to id 
           url_data = urlparse(url)
@@ -403,11 +487,10 @@ elif sumtype == 'Abstractive (T5 Algorithm)':
                return script, len(script.split())
           transcript, no_of_words = generate_transcript(id)
 
-          model_max_length = 1024
           model = T5ForConditionalGeneration.from_pretrained("t5-base")
-          tokenizer = T5Tokenizer.from_pretrained("t5-base", model_max_length=model_max_length)
-          inputs = tokenizer.encode("summarize: " + transcript, return_tensors="pt", max_length=model_max_length, truncation=True)
-
+          tokenizer = T5Tokenizer.from_pretrained("t5-base")
+          inputs = tokenizer.encode("summarize: " + transcript, return_tensors="pt", max_length=512, truncation=True)
+          
           outputs = model.generate(
               inputs, 
               max_length=150, 
@@ -418,11 +501,10 @@ elif sumtype == 'Abstractive (T5 Algorithm)':
           
           summ = tokenizer.decode(outputs[0])
           
+          
           # Translate and Print Summary
           translated = GoogleTranslator(source='auto', target= get_key_from_dict(add_selectbox,languages_dict)).translate(summ)
           html_str3 = f"""
-
-
 <style>
 p.a {{
 text-align: justify;
@@ -446,7 +528,6 @@ text-align: justify;
               audio_bytes = audio_file.read()    
               st.audio(audio_bytes, format='audio/ogg',start_time=0)
 
-
-
- 
 #-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x
+
+
