@@ -332,33 +332,13 @@ if sumtype == 'Extractive':
          id = url_data.query[2::]
 
          def generate_transcript(id):
-                 transcript = YouTubeTranscriptApi.get_transcript(id)
-                 script = ""
-
-                 for text in transcript:
-                         t = text["text"]
-                         if t != '[Music]':
-                                 script += t + " "
-
-                 return script, len(script.split())
-         transcript, no_of_words = generate_transcript(id)
-
-        
-         model_max_length = 1024
-         model = T5ForConditionalGeneration.from_pretrained("t5-base")
-         tokenizer = T5Tokenizer.from_pretrained("t5-base", model_max_length=model_max_length)
-         inputs = tokenizer.encode("summarize: " + transcript, return_tensors="pt", max_length=model_max_length, truncation=True)
-
-
-         outputs = model.generate(
-              inputs, 
-              max_length=150, 
-              min_length=40, 
-              length_penalty=2.0, 
-              num_beams=4, 
-              early_stopping=True)
-          
-         summ = tokenizer.decode(outputs[0])
+def summarize_transcript(transcript):
+    summariser = pipeline('summarization', model='t5-base')
+    summary = ''
+    for i in range(0, (len(transcript)//1000)+1):
+        summary_text = summariser(transcript[i*1000:(i+1)*1000])[0]['summary_text']
+        summary = summary + summary_text + ' '
+    return summary
 
          # Translate and Print Summary
          translated = GoogleTranslator(source='auto', target= get_key_from_dict(add_selectbox,languages_dict)).translate(summ)
